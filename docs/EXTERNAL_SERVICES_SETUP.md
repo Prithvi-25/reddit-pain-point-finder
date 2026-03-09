@@ -44,7 +44,7 @@ Reddit's free API lets you scrape posts and comments from subreddits.
 1. **Create Reddit app:**
    - Go to [reddit.com/prefs/apps](https://www.reddit.com/prefs/apps)
    - Scroll to bottom → click **"create another app"**
-   - Name: `reddit-pain-point-finder`
+   - Name: `pain-point-scraper`
    - Type: Select **"script"**
    - Description: `Product discovery tool`
    - About URL: *(leave blank)*
@@ -53,7 +53,7 @@ Reddit's free API lets you scrape posts and comments from subreddits.
 2. **Save your credentials:**
    - **Client ID:** The 14-character string shown under the app name
    - **Client Secret:** Click "edit" to reveal, copy the secret
-   - **User Agent:** `reddit-pain-point-finder:v1.0 (by /u/YOUR_REDDIT_USERNAME)`
+   - **User Agent:** `pain-point-scraper:v1.0 (by /u/YOUR_REDDIT_USERNAME)`
 
 > **Note:** You'll enter these when configuring n8n workflows (Step 4), not in the frontend .env file.
 

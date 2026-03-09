@@ -2,7 +2,7 @@
 
 > Automated product discovery tool that scrapes Reddit for pain points, uses AI to analyze and cluster them, and surfaces trending opportunities.
 
-**[Live Demo →](#)** *(deploy to Vercel to get your live URL)*
+**[Live Demo →](https://reddit-pain-point-finder.vercel.app/)** *(Demo link — deploy to Vercel for your own instance)*
 
 ---
 
@@ -109,4 +109,4 @@ reddit-pain-point-finder/
 
 ## Author
 
-**Prithvi** — Product Manager
+**Prithvi** — [Portfolio](https://prithvi-25.github.io/)

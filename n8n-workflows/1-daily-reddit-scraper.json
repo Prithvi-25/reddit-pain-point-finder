@@ -77,7 +77,7 @@
           "parameters": [
             {
               "name": "User-Agent",
-              "value": "reddit-pain-point-finder:v1.0"
+              "value": "pain-point-scraper:v1.0"
             }
           ]
         },
