@@ -1,4 +1,4 @@
-import { TrendingUp, ThumbsUp, MessageCircle } from 'lucide-react'
+import { TrendingUp, ThumbsUp, MessageCircle, Repeat } from 'lucide-react'
 
 const categoryToClass = (category) => {
     const map = {
@@ -43,6 +43,10 @@ export function PainPointCard({ painPoint, onClick }) {
                 </div>
                 <div className="meta-item">
                     <span>r/{painPoint.subreddit}</span>
+                </div>
+                <div className="meta-item">
+                    <Repeat size={14} />
+                    <span>{painPoint.mention_count}× voiced</span>
                 </div>
                 {painPoint.willingness_to_pay_score >= 7 && (
                     <span className="wtp-badge">💰 High WTP</span>
