@@ -21,9 +21,10 @@ export function RefreshButton({ onRefresh }) {
             return
         }
 
-        setStatus('Triggering n8n workflow...')
+        setStatus('Scraping Reddit for pain points...')
         try {
-            const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL
+            // Use local API server, or n8n webhook if configured
+            const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL || 'http://localhost:3001/api/refresh'
             const response = await fetch(webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }

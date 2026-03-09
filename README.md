@@ -8,8 +8,8 @@
 
 ## Features
 
-- 🔍 **Smart Scraping** — Scrapes 9 subreddits for pain points (SaaS, startups, real estate, etc.)
-- 🤖 **AI-Powered Analysis** — GPT-4 extracts and categorizes each pain point
+- 🔍 **Smart Scraping** — Scrapes 9 subreddits with 25+ keyword patterns
+- 🤖 **AI-Powered Analysis** — GPT-4o-mini extracts and categorizes each pain point
 - 📊 **Multi-Factor Trending Score** — Recency, engagement, and willingness-to-pay composite
 - 🎯 **Real-Time Search & Filters** — Search, category filter, and sort by multiple criteria
 - 📈 **Trending Visualization** — Interactive chart showing pain points over time
@@ -20,12 +20,11 @@
 
 | Layer | Technology |
 |-------|-----------|
-| **Backend** | n8n Cloud (scheduled workflows) |
+| **Scraper** | Node.js + snoowrap (Reddit API) |
+| **AI Analysis** | OpenAI GPT-4o-mini |
 | **Database** | Supabase (PostgreSQL) |
 | **Frontend** | React 18 + Vite |
 | **Charts** | Recharts |
-| **AI** | OpenAI GPT-4 Turbo |
-| **Deployment** | Vercel |
 
 ## Quick Start
 
@@ -39,51 +38,57 @@ npm run dev
 # Visit http://localhost:5173
 ```
 
-## Connect Live Data
+## Live Mode Setup
 
 1. Copy `.env.example` to `.env`
-2. Add your Supabase and n8n credentials:
-   ```
-   VITE_SUPABASE_URL=your_supabase_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-   VITE_N8N_WEBHOOK_URL=your_n8n_webhook_url
-   ```
-3. Run the database schema: `database/schema.sql` in Supabase SQL Editor
-4. Set up n8n workflows (see `docs/EXTERNAL_SERVICES_SETUP.md`)
+2. Create a Reddit "script" app at [reddit.com/prefs/apps](https://reddit.com/prefs/apps)
+3. Get an OpenAI API key at [platform.openai.com](https://platform.openai.com)
+4. Create a Supabase project and run `database/schema.sql`
+5. Fill in all credentials in `.env`
+
+```bash
+# Run the scraper (fetches real Reddit data)
+npm run scrape
+
+# Or start the API server for manual refresh from the dashboard
+npm run server    # runs on port 3001
+npm run dev       # runs frontend on port 5173
+```
 
 ## How It Works
 
-1. **n8n workflow** scrapes Reddit daily (or on-demand via webhook)
-2. **Keyword filter** identifies potential pain points using regex patterns
-3. **OpenAI GPT-4** analyzes, categorizes, and scores willingness-to-pay
-4. **Trending score** calculated from recency × engagement × WTP signals
-5. **Supabase** stores all data with deduplication
+```
+Reddit API → Keyword Filter → GPT-4o-mini Analysis → Trending Score → Supabase → React Dashboard
+```
+
+1. **Scraper** fetches hot + new posts from 9 subreddits via Reddit API
+2. **Keyword filter** matches 25+ pain-point regex patterns (wish, frustrated, need, etc.)
+3. **GPT-4o-mini** extracts title, description, category, and willingness-to-pay score
+4. **Trending score** calculated: recency × engagement × WTP signals
+5. **Supabase** stores with deduplication (upsert on title + subreddit)
 6. **React dashboard** displays results with search, filters, and charts
 
 ## Project Structure
 
 ```
 reddit-pain-point-finder/
+├── server/
+│   ├── redditClient.js   # Reddit OAuth2 + keyword filtering
+│   ├── analyzer.js        # GPT-4o-mini pain point extraction
+│   ├── scorer.js          # Trending score calculation
+│   ├── db.js              # Supabase server-side client
+│   ├── scrape.js          # Main orchestrator CLI
+│   └── webhook.js         # Express API for manual refresh
 ├── database/
-│   └── schema.sql          # Supabase database schema
+│   └── schema.sql
 ├── docs/
 │   ├── EXTERNAL_SERVICES_SETUP.md
 │   └── USER_GUIDE.md
 ├── src/
-│   ├── components/
-│   │   ├── ExportButton.jsx
-│   │   ├── FilterBar.jsx
-│   │   ├── PainPointCard.jsx
-│   │   ├── PainPointModal.jsx
-│   │   ├── RefreshButton.jsx
-│   │   ├── StatsBar.jsx
-│   │   └── TrendingChart.jsx
-│   ├── data/
-│   │   └── mockData.js     # Demo mode data
-│   ├── hooks/
-│   │   └── usePainPoints.js
-│   ├── lib/
-│   │   └── supabase.js
+│   ├── components/        # 7 React components
+│   ├── data/mockData.js   # Demo mode data
+│   ├── hooks/usePainPoints.js
+│   ├── lib/supabase.js
 │   ├── App.jsx
 │   ├── index.css
 │   └── main.jsx
@@ -92,6 +97,15 @@ reddit-pain-point-finder/
 ├── package.json
 └── vite.config.js
 ```
+
+## npm Scripts
+
+| Script | Description |
+|--------|------------|
+| `npm run dev` | Start Vite dev server (frontend) |
+| `npm run scrape` | Run Reddit scraper CLI |
+| `npm run server` | Start Express API (port 3001) |
+| `npm run build` | Production build |
 
 ## Author
 
