@@ -1,0 +1,368 @@
+{
+  "name": "Reddit Pain Point Scraper - Daily",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 0 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "subreddits",
+              "name": "subreddits",
+              "value": "={{ [\"SaaS\", \"startups\", \"Entrepreneur\", \"aiautomation\", \"sidehustle\", \"realestate\", \"n8n_ai_agents\", \"homeowners\", \"businessowners\"] }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-subreddits",
+      "name": "Set Subreddits",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "subreddit",
+              "name": "subreddit",
+              "value": "={{ $json.subreddits }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "split-subreddits",
+      "name": "Split Into Items",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://oauth.reddit.com/r/{{ $json.subreddit }}/hot.json?limit=100&t=month",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "reddit-pain-point-finder:v1.0"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-reddit",
+      "name": "Fetch Reddit Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "reddit-api-basic-auth",
+          "name": "Reddit API Basic Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Reddit API response and filter posts from last 60 days\nconst posts = [];\nconst inputData = $input.all();\n\nfor (const item of inputData) {\n  const children = item.json.data?.children || [];\n  const subreddit = item.json.subreddit || 'unknown';\n\n  for (const child of children) {\n    const post = child.data;\n    const createdDate = new Date(post.created_utc * 1000);\n    const now = new Date();\n    const daysOld = (now - createdDate) / (1000 * 60 * 60 * 24);\n\n    // Only keep posts from last 60 days\n    if (daysOld <= 60) {\n      posts.push({\n        title: post.title || '',\n        body: post.selftext || '',\n        subreddit: post.subreddit,\n        upvotes: post.ups || 0,\n        comments: post.num_comments || 0,\n        created_at: createdDate.toISOString(),\n        permalink: `https://reddit.com${post.permalink}`,\n        author: post.author || 'unknown'\n      });\n    }\n  }\n}\n\nreturn posts.map(post => ({ json: post }));"
+      },
+      "id": "parse-posts",
+      "name": "Parse Reddit Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter posts using pain point keyword patterns\nconst painPointKeywords = [\n  /frustrated\\s+with/i,\n  /wish\\s+there\\s+was/i,\n  /looking\\s+for\\s+(a\\s+)?tool/i,\n  /need\\s+(a\\s+)?solution/i,\n  /can'?t\\s+find/i,\n  /struggling\\s+with/i,\n  /tired\\s+of/i,\n  /hate\\s+that/i,\n  /anyone\\s+know\\s+(of\\s+)?a/i,\n  /is\\s+there\\s+(a\\s+)?tool/i,\n  /need\\s+(a\\s+)?way\\s+to/i,\n  /how\\s+do\\s+i/i,\n  /better\\s+way\\s+to/i\n];\n\nconst items = $input.all();\nconst filtered = [];\n\nfor (const item of items) {\n  const text = `${item.json.title} ${item.json.body}`.toLowerCase();\n  const hasPainPoint = painPointKeywords.some(regex => regex.test(text));\n\n  if (hasPainPoint) {\n    filtered.push(item);\n  }\n}\n\nreturn filtered;"
+      },
+      "id": "filter-keywords",
+      "name": "Filter Pain Point Keywords",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4-turbo",
+        "messages": {
+          "values": [
+            {
+              "content": "You are a product manager analyzing user pain points from Reddit to discover product opportunities.\\n\\nYour task: Extract the core pain point from a Reddit post and categorize it.\\n\\nReturn ONLY valid JSON (no markdown, no extra text) in this exact format:\\n{\\n  \\\"title\\\": \\\"Brief pain point title (max 10 words)\\\",\\n  \\\"description\\\": \\\"2-3 sentence summary of the frustration or unmet need\\\",\\n  \\\"category\\\": \\\"One of: Product-Market Fit, User Experience, Pricing, Competition, Ease of Use, Technical Issues, Integrations, Onboarding, or suggest a new category\\\",\\n  \\\"willingness_to_pay\\\": 0-10 score based on language indicating they'd pay for a solution\\n}\\n\\nScoring willingness_to_pay:\\n- 9-10: Explicit mention of price they'd pay (\\\"I'd pay $50/mo\\\")\\n- 7-8: Strong intent (\\\"take my money\\\", \\\"I would definitely pay\\\")\\n- 4-6: Moderate intent (\\\"might be worth paying for\\\")\\n- 1-3: Weak/no intent (just complaining)\\n- 0: No willingness to pay"
+            },
+            {
+              "content": "=Post Title: {{ $json.title }}\\n\\nPost Body: {{ $json.body }}\\n\\nSubreddit: r/{{ $json.subreddit }}\\n\\nExtract the pain point.",
+              "role": "user"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 300
+        },
+        "jsonOutput": true
+      },
+      "id": "openai-analyze",
+      "name": "OpenAI Analyze Pain Point",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        1560,
+        300
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-pain-point-analyzer",
+          "name": "OpenAI Pain Point Analyzer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine OpenAI analysis with Reddit metadata\nconst items = $input.all();\nconst combined = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const aiResponse = items[i].json.message?.content;\n  \n  // Parse AI response JSON\n  let painPoint;\n  try {\n    painPoint = typeof aiResponse === 'string' ? JSON.parse(aiResponse) : aiResponse;\n  } catch (e) {\n    console.log('Failed to parse AI response:', aiResponse);\n    continue;\n  }\n\n  // Get original Reddit data from earlier node\n  const originalData = $('Filter Pain Point Keywords').item[i].json;\n\n  combined.push({\n    json: {\n      title: painPoint.title,\n      description: painPoint.description,\n      category: painPoint.category,\n      willingness_to_pay_score: painPoint.willingness_to_pay || 0,\n      subreddit: originalData.subreddit,\n      avg_upvotes: originalData.upvotes,\n      avg_comments: originalData.comments,\n      source_links: [originalData.permalink],\n      mention_count: 1,\n      created_at: originalData.created_at\n    }\n  });\n}\n\nreturn combined;"
+      },
+      "id": "combine-data",
+      "name": "Combine Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate trending score using multi-factor formula\n\n// Subreddit size normalization (approximate subscriber counts)\nconst subredditSizes = {\n  'SaaS': 200000,\n  'startups': 1500000,\n  'Entrepreneur': 1200000,\n  'aiautomation': 50000,\n  'sidehustle': 800000,\n  'realestate': 500000,\n  'n8n_ai_agents': 10000,\n  'homeowners': 100000,\n  'businessowners': 50000\n};\n\nconst maxSubSize = Math.max(...Object.values(subredditSizes));\n\nfunction calculateRecencyMultiplier(createdAt) {\n  const now = new Date();\n  const created = new Date(createdAt);\n  const daysOld = (now - created) / (1000 * 60 * 60 * 24);\n\n  if (daysOld <= 7) return 3.0;\n  if (daysOld <= 30) return 1.5;\n  return 1.0;\n}\n\nfunction normalizeSubredditSize(subreddit) {\n  const size = subredditSizes[subreddit] || 50000;\n  return (size / maxSubSize) * 10;\n}\n\nconst items = $input.all();\nconst withScores = [];\n\nfor (const item of items) {\n  const data = item.json;\n\n  const recencyMultiplier = calculateRecencyMultiplier(data.created_at);\n  const subredditSizeScore = normalizeSubredditSize(data.subreddit);\n\n  // Formula: (mentions × recency × 0.25) + (upvotes × 0.20) + (comments × 0.15) + (subreddit_size × 0.15) + (wtp × 0.25)\n  const trendingScore =\n    (data.mention_count * recencyMultiplier * 0.25) +\n    (data.avg_upvotes * 0.20) +\n    (data.avg_comments * 0.15) +\n    (subredditSizeScore * 0.15) +\n    (data.willingness_to_pay_score * 0.25);\n\n  withScores.push({\n    json: {\n      ...data,\n      trending_score: Math.round(trendingScore * 100) / 100\n    }\n  });\n}\n\nreturn withScores;"
+      },
+      "id": "calc-trending",
+      "name": "Calculate Trending Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO pain_points (\\n  title,\\n  description,\\n  category,\\n  trending_score,\\n  mention_count,\\n  avg_upvotes,\\n  avg_comments,\\n  subreddit,\\n  willingness_to_pay_score,\\n  source_links,\\n  created_at,\\n  last_seen\\n) VALUES (\\n  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11, NOW()\\n)\\nON CONFLICT (title, subreddit)\\nDO UPDATE SET\\n  mention_count = pain_points.mention_count + 1,\\n  trending_score = EXCLUDED.trending_score,\\n  avg_upvotes = EXCLUDED.avg_upvotes,\\n  avg_comments = EXCLUDED.avg_comments,\\n  willingness_to_pay_score = EXCLUDED.willingness_to_pay_score,\\n  last_seen = NOW(),\\n  source_links = array_append(pain_points.source_links, EXCLUDED.source_links[1])\\nRETURNING *;",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "$1",
+              "value": "={{ $json.title }}"
+            },
+            {
+              "name": "$2",
+              "value": "={{ $json.description }}"
+            },
+            {
+              "name": "$3",
+              "value": "={{ $json.category }}"
+            },
+            {
+              "name": "$4",
+              "value": "={{ $json.trending_score }}"
+            },
+            {
+              "name": "$5",
+              "value": "={{ $json.mention_count }}"
+            },
+            {
+              "name": "$6",
+              "value": "={{ $json.avg_upvotes }}"
+            },
+            {
+              "name": "$7",
+              "value": "={{ $json.avg_comments }}"
+            },
+            {
+              "name": "$8",
+              "value": "={{ $json.subreddit }}"
+            },
+            {
+              "name": "$9",
+              "value": "={{ $json.willingness_to_pay_score }}"
+            },
+            {
+              "name": "$10",
+              "value": "={{ $json.source_links }}"
+            },
+            {
+              "name": "$11",
+              "value": "={{ $json.created_at }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "upsert-supabase",
+      "name": "Upsert to Supabase",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2220,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-reddit-pain-points",
+          "name": "Supabase Reddit Pain Points"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Subreddits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Subreddits": {
+      "main": [
+        [
+          {
+            "node": "Split Into Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Into Items": {
+      "main": [
+        [
+          {
+            "node": "Fetch Reddit Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Reddit Posts": {
+      "main": [
+        [
+          {
+            "node": "Parse Reddit Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Reddit Posts": {
+      "main": [
+        [
+          {
+            "node": "Filter Pain Point Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Pain Point Keywords": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Analyze Pain Point",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Analyze Pain Point": {
+      "main": [
+        [
+          {
+            "node": "Combine Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Trending Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Trending Score": {
+      "main": [
+        [
+          {
+            "node": "Upsert to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-08T00:00:00.000Z",
+  "versionId": "1"
+}
